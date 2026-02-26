@@ -36,10 +36,11 @@ ScreenGui.ResetOnSpawn = false
 local success, result = pcall(function() return gethui() end)
 ScreenGui.Parent = success and result or CoreGui
 
--- MAIN FRAME (KOTAK ATAS - LEBIH KECIL)
+-- MAIN FRAME (KOTAK ATAS - DIKUNCI DI KANAN ATAS)
 local MainFrame = Instance.new("CanvasGroup")
-MainFrame.Size = UDim2.new(0, 135, 0, 26) -- Diperkecil karena kotak link dipindah
-MainFrame.Position = UDim2.new(1, -150, 0, 20)
+MainFrame.Size = UDim2.new(0, 135, 0, 26)
+MainFrame.AnchorPoint = Vector2.new(1, 0) -- Mengunci posisi dari sudut kanan
+MainFrame.Position = UDim2.new(1, -70, 0, 15) -- -70 dari kanan, 15 dari atas (Sesuai Gambar 2)
 MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
 MainFrame.BorderSizePixel = 0
 MainFrame.Active = true 
@@ -49,8 +50,9 @@ Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 13)
 
 -- FILTER FRAME (MENU DROP-DOWN BAWAH)
 local FilterFrame = Instance.new("Frame")
-FilterFrame.Size = UDim2.new(0, 180, 0, 265) -- Diperpanjang untuk 1 Kotak Link + 10 Kotak Keyword
-FilterFrame.Position = UDim2.new(MainFrame.Position.X.Scale, MainFrame.Position.X.Offset - 22, MainFrame.Position.Y.Scale, MainFrame.Position.Y.Offset + 32)
+FilterFrame.Size = UDim2.new(0, 180, 0, 265)
+FilterFrame.AnchorPoint = Vector2.new(1, 0) -- Mengunci dari sudut kanan juga
+FilterFrame.Position = UDim2.new(1, -45, 0, 45) -- Berada pas di bawah MainFrame
 FilterFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
 FilterFrame.Visible = false
 FilterFrame.Parent = ScreenGui
@@ -65,11 +67,11 @@ local FilterPad = Instance.new("UIPadding", FilterFrame)
 FilterPad.PaddingTop = UDim.new(0, 8)
 FilterPad.PaddingBottom = UDim.new(0, 8)
 
--- 0. KOTAK INPUT LINK DISCORD (Paling Atas di Drop-down)
+-- 0. KOTAK INPUT LINK DISCORD (Paling Atas)
 local WebhookBox = Instance.new("TextBox")
 WebhookBox.Size = UDim2.new(0, 160, 0, 20)
 WebhookBox.BackgroundColor3 = Color3.fromRGB(35, 35, 40)
-WebhookBox.TextColor3 = Color3.fromRGB(85, 170, 255) -- Warna teks biru agar beda dengan keyword
+WebhookBox.TextColor3 = Color3.fromRGB(85, 170, 255)
 WebhookBox.PlaceholderText = "Paste Link Discord Di Sini..."
 WebhookBox.Text = webhookLink
 WebhookBox.Font = Enum.Font.GothamBold
@@ -90,14 +92,13 @@ WebhookBox.FocusLost:Connect(function()
     saveConfig() 
 end)
 
--- Membuat Garis Pembatas (Opsional agar rapi)
 local Divider = Instance.new("Frame", FilterFrame)
 Divider.Size = UDim2.new(0, 150, 0, 1)
 Divider.BackgroundColor3 = Color3.fromRGB(50, 50, 55)
 Divider.BorderSizePixel = 0
 Divider.LayoutOrder = 2
 
--- 1-10. KOTAK INPUT KEYWORD (Di Bawah Link)
+-- 1-10. KOTAK INPUT KEYWORD
 for i = 1, 10 do
     local kwBox = Instance.new("TextBox")
     kwBox.Size = UDim2.new(0, 160, 0, 18)
@@ -118,7 +119,7 @@ for i = 1, 10 do
     end)
 end
 
--- SISTEM DRAG BERSAMAAN
+-- SISTEM DRAG (SEKARANG MENDUKUNG ANCHOR POINT)
 local dragging, dragInput, dragStart, startPos
 MainFrame.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
@@ -133,7 +134,7 @@ game:GetService("UserInputService").InputChanged:Connect(function(input)
     if input == dragInput and dragging then
         local delta = input.Position - dragStart
         MainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-        FilterFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X - 22, startPos.Y.Scale, startPos.Y.Offset + delta.Y + 32)
+        FilterFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X + 25, startPos.Y.Scale, startPos.Y.Offset + delta.Y + 30)
     end
 end)
 
@@ -144,7 +145,7 @@ UIListLayout.Padding = UDim.new(0, 8)
 UIListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 UIListLayout.VerticalAlignment = Enum.VerticalAlignment.Center
 
--- 1. TOMBOL "ARSY" (Pengganti Kotak Link & Tombol Biru)
+-- 1. TOMBOL "ARSY"
 local ArsyBtn = Instance.new("TextButton", MainFrame)
 ArsyBtn.Size = UDim2.new(0, 60, 0, 18)
 ArsyBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
@@ -202,7 +203,9 @@ local function sendToDiscord(cleanMsg)
     lastMsg = cleanMsg
 
     local newLine = ""
-    local prefix, username, rest = string.match(cleanMsg, "^(%[Server%]:%s*)(%S+)(.*)$")
+    
+    -- [PERBAIKAN SPOILER]: Dibuat jauh lebih kebal terhadap spasi/karakter tersembunyi
+    local prefix, username, rest = string.match(cleanMsg, "(%[Server%]%:?%s+)(%S+)(.*)")
     
     if prefix and username and rest then
         newLine = prefix .. "||" .. username .. "||" .. rest
@@ -244,7 +247,6 @@ local function checkMessage(rawMsg)
         return
     end
 
-    -- LOGIKA FILTER DINAMIS (MULTIPLE FILTER DENGAN TANDA '+')
     local isTargetFound = false
     for _, boxText in ipairs(savedKeywords) do
         if boxText ~= "" then
@@ -272,7 +274,6 @@ end
 PlayBtn.MouseButton1Click:Connect(function()
     if isRunning then return end
     
-    -- Peringatan jika Link Kosong
     if webhookLink == "" then
         FilterFrame.Visible = true
         WebhookBox.Text = "ISI LINK DISCORD!"
