@@ -2,70 +2,100 @@ local DISCORD_WEBHOOK = "https://discord.com/api/webhooks/1455443365964419264/BU
 
 local HttpService = game:GetService("HttpService")
 local req = (syn and syn.request) or (http and http.request) or http_request or (fluxus and fluxus.request) or request
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local lastMsg = ""
 
-if not req then
-    warn("Executor tidak mendukung HTTP Request")
-    return
+local function sendToDiscord(msgText, reason)
+    if not req then return end
+    if msgText == lastMsg then return end
+    lastMsg = msgText
+
+    pcall(function()
+        req({
+            Url = DISCORD_WEBHOOK,
+            Method = "POST",
+            Headers = { ["Content-Type"] = "application/json" },
+            Body = HttpService:JSONEncode({
+                -- Sekarang bot akan memberitahu Anda ALASAN kenapa pesan ini dikirim (Karena Secret atau Ruby)
+                content = "🌟 **[FISHIT VIP RADAR]** " .. reason .. " Terdeteksi!\n```ansi\n\u001b[1;33m" .. msgText .. "\u001b[0m\n```"
+            })
+        })
+    end)
 end
 
--- Kirim pesan pembuka ke Discord agar kita tahu skrip mulai bekerja
-req({
-    Url = DISCORD_WEBHOOK,
-    Method = "POST",
-    Headers = { ["Content-Type"] = "application/json" },
-    Body = HttpService:JSONEncode({ content = "⏳ **[SCANNER]** Sedang mencari database Fishit... Mohon tunggu..." })
-})
+local function checkMessage(msg)
+    local lowerMsg = string.lower(msg)
+    
+    -- ==========================================
+    -- 1. CEK MUTASI SPESIFIK: RUBY GEMSTONE
+    -- ==========================================
+    if string.find(lowerMsg, "ruby gemstone") then
+        sendToDiscord(msg, "Mutasi Ruby Gemstone")
+        return
+    end
 
-local keyword_names = {"fish", "data", "item", "rarity", "config", "index", "loot"}
-local results = "🕵️‍♂️ **HASIL SCAN DATABASE FISHIT:**\n\n"
-local count = 0
+    -- ==========================================
+    -- 2. CEK DATABASE IKAN UNTUK RARITY "SECRET"
+    -- ==========================================
+    local itemsFolder = game:GetService("ReplicatedStorage"):FindFirstChild("Items")
+    if not itemsFolder then return end
 
-for _, obj in pairs(ReplicatedStorage:GetDescendants()) do
-    if obj:IsA("ModuleScript") then
-        local objName = string.lower(obj.Name)
-        local isSuspicious = false
-        
-        for _, kw in pairs(keyword_names) do
-            if string.find(objName, kw) then
-                isSuspicious = true
-                break
-            end
-        end
-
-        if isSuspicious then
-            local success, data = pcall(function() return require(obj) end)
-            if success and type(data) == "table" then
-                -- Ambil 3 kunci pertama sebagai cuplikan
-                local hints = ""
-                local limit = 0
-                for k, v in pairs(data) do
-                    if limit > 2 then break end
-                    hints = hints .. tostring(k) .. ", "
-                    limit = limit + 1
+    -- Bot akan membaca semua file ikan satu per satu
+    for _, itemModule in pairs(itemsFolder:GetChildren()) do
+        if itemModule:IsA("ModuleScript") then
+            local fishName = string.lower(itemModule.Name)
+            
+            -- Jika nama ikan di database ini cocok/ada di dalam kalimat obrolan
+            if string.find(lowerMsg, fishName) then
+                
+                -- Buka buku catatan ikan tersebut
+                local success, data = pcall(function() return require(itemModule) end)
+                if success and type(data) == "table" then
+                    
+                    -- Cari tahu kolom rarity-nya
+                    local rarity = tostring(data.Rarity or data.rarity or data.Tier or "")
+                    
+                    -- Jika rarity ikan tersebut adalah Secret, kirim ke Discord!
+                    if string.lower(rarity) == "secret" then
+                        sendToDiscord(msg, "Ikan Secret (" .. itemModule.Name .. ")")
+                        return
+                    end
                 end
-                
-                results = results .. "✅ **Path:** `" .. obj:GetFullName() .. "`\n"
-                results = results .. "↳ Isi: _{ " .. hints .. "... }_\n\n"
-                count = count + 1
-                
-                -- Batasi hasil agar pesan Discord tidak kepanjangan
-                if count >= 10 then break end 
             end
         end
     end
 end
 
-if count == 0 then
-    results = results .. "❌ Tidak ada file ModuleScript yang mencurigakan."
-end
-
--- Kirim hasil akhirnya ke Discord
+-- ==========================================
+-- LISTENER 1: TextChatService (Sistem Baru)
+-- ==========================================
 pcall(function()
-    req({
-        Url = DISCORD_WEBHOOK,
-        Method = "POST",
-        Headers = { ["Content-Type"] = "application/json" },
-        Body = HttpService:JSONEncode({ content = results })
-    })
+    local TCS = game:GetService("TextChatService")
+    TCS.MessageReceived:Connect(function(textChatMessage)
+        local prefix = textChatMessage.PrefixText or ""
+        local text = textChatMessage.Text or ""
+        checkMessage(prefix .. " " .. text)
+    end)
 end)
+
+-- ==========================================
+-- LISTENER 2: Legacy Chat (Sistem Lama)
+-- ==========================================
+pcall(function()
+    local ReplicatedStorage = game:GetService("ReplicatedStorage")
+    local chatEvents = ReplicatedStorage:WaitForChild("DefaultChatSystemChatEvents", 5)
+    if chatEvents then
+        chatEvents:WaitForChild("OnMessageDoneFiltering", 5).OnClientEvent:Connect(function(messageData)
+            local msg = messageData.Message or ""
+            local from = messageData.FromSpeaker or ""
+            local channel = messageData.OriginalChannel or ""
+            
+            if from == "" then
+                checkMessage("[" .. channel .. "] " .. msg)
+            else
+                checkMessage("[" .. channel .. "] " .. from .. ": " .. msg)
+            end
+        end)
+    end
+end)
+
+print("📡 Fishit VIP Radar [DATABASE MODE] Aktif! Mengawasi Secret & Ruby Gemstone...")
