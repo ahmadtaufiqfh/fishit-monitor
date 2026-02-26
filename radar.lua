@@ -3,6 +3,15 @@ local HttpService = game:GetService("HttpService")
 local req = (syn and syn.request) or (http and http.request) or http_request or (fluxus and fluxus.request) or request
 
 -- ==========================================
+-- ANTI-DUPLIKAT (PEMBERSIH UI LAMA)
+-- ==========================================
+local success, result = pcall(function() return gethui() end)
+local targetParent = (success and result) or CoreGui
+if targetParent:FindFirstChild("Radar") then
+    targetParent.Radar:Destroy()
+end
+
+-- ==========================================
 -- WEBHOOK & KEYWORD CONFIG (AUTO-SAVE)
 -- ==========================================
 local CONFIG_FILE = "Radar_Config.json"
@@ -33,14 +42,13 @@ end
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "Radar"
 ScreenGui.ResetOnSpawn = false
-local success, result = pcall(function() return gethui() end)
-ScreenGui.Parent = success and result or CoreGui
+ScreenGui.Parent = targetParent
 
--- MAIN FRAME (KOTAK ATAS - NAIK KE ATAS SEJAJAR MENU)
+-- MAIN FRAME (KOTAK ATAS)
 local MainFrame = Instance.new("CanvasGroup")
 MainFrame.Size = UDim2.new(0, 135, 0, 26)
-MainFrame.AnchorPoint = Vector2.new(1, 0) 
-MainFrame.Position = UDim2.new(1, -70, 0, 10) -- DIUBAH DARI 15 KE 4 AGAR NAIK MENTOK ATAS
+-- Menggunakan Offset Murni (Aman untuk Drag Delta Android)
+MainFrame.Position = UDim2.new(1, -260, 0, 4) 
 MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
 MainFrame.BorderSizePixel = 0
 MainFrame.Active = true 
@@ -51,8 +59,7 @@ Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 13)
 -- FILTER FRAME (MENU DROP-DOWN BAWAH)
 local FilterFrame = Instance.new("Frame")
 FilterFrame.Size = UDim2.new(0, 180, 0, 265)
-FilterFrame.AnchorPoint = Vector2.new(1, 0) 
-FilterFrame.Position = UDim2.new(1, -45, 0, 34) -- DIUBAH DARI 45 KE 34 MENYESUAIKAN MAINFRAME
+FilterFrame.Position = UDim2.new(1, -282, 0, 34) -- Menyesuaikan posisi MainFrame
 FilterFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
 FilterFrame.Visible = false
 FilterFrame.Parent = ScreenGui
@@ -119,7 +126,7 @@ for i = 1, 10 do
     end)
 end
 
--- SISTEM DRAG (MENGIKUTI POSISI BARU)
+-- SISTEM DRAG (AMAN UNTUK SEMUA EXECUTOR ANDROID)
 local dragging, dragInput, dragStart, startPos
 MainFrame.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
@@ -134,7 +141,7 @@ game:GetService("UserInputService").InputChanged:Connect(function(input)
     if input == dragInput and dragging then
         local delta = input.Position - dragStart
         MainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-        FilterFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X + 25, startPos.Y.Scale, startPos.Y.Offset + delta.Y + 30)
+        FilterFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X - 22, startPos.Y.Scale, startPos.Y.Offset + delta.Y + 30)
     end
 end)
 
@@ -183,4 +190,127 @@ CloseBtn.BackgroundColor3 = Color3.fromRGB(255, 85, 85)
 CloseBtn.Text = "" 
 CloseBtn.LayoutOrder = 4
 Instance.new("UICorner", CloseBtn).CornerRadius = UDim.new(1, 0)
-CloseBtn.MouseButton1Click:Connect(
+CloseBtn.MouseButton1Click:Connect(function() ScreenGui:Destroy() end)
+
+-- ==========================================
+-- MESIN RADAR & DISCORD SENDER (AUTO-UPDATE)
+-- ==========================================
+local isRunning = false
+local waitingForFirstCatch = false
+local connectionTCS, connectionLegacy
+local lastMsg = ""
+
+local currentMessageId = nil
+local catchList = {}
+local MAX_LINES = 10 
+
+local function sendToDiscord(cleanMsg)
+    if not req or webhookLink == "" then return end
+    if cleanMsg == lastMsg then return end
+    lastMsg = cleanMsg
+
+    local newLine = ""
+    
+    -- [PERBAIKAN SPOILER]: Kebal terhadap spasi gaib
+    local prefix, username, rest = string.match(cleanMsg, "(.*%[Server%]%:?%s*)(%S+)(.*)")
+    
+    if prefix and username and rest then
+        newLine = prefix .. "||" .. username .. "||" .. rest
+    else
+        newLine = cleanMsg
+    end
+
+    table.insert(catchList, newLine)
+
+    if #catchList > MAX_LINES then
+        currentMessageId = nil
+        catchList = {newLine}
+    end
+
+    local finalContent = table.concat(catchList, "\n")
+
+    task.spawn(function()
+        local cleanLink = string.gsub(webhookLink, "%?wait=true", "")
+        if currentMessageId == nil then
+            local response = req({Url = cleanLink .. "?wait=true", Method = "POST", Headers = { ["Content-Type"] = "application/json" }, Body = HttpService:JSONEncode({ content = finalContent })})
+            if response and response.StatusCode == 200 then
+                local success, data = pcall(function() return HttpService:JSONDecode(response.Body) end)
+                if success and data and data.id then currentMessageId = data.id end
+            end
+        else
+            local response = req({Url = cleanLink .. "/messages/" .. currentMessageId, Method = "PATCH", Headers = { ["Content-Type"] = "application/json" }, Body = HttpService:JSONEncode({ content = finalContent })})
+            if response and (response.StatusCode == 404 or response.StatusCode == 400) then currentMessageId = nil end
+        end
+    end)
+end
+
+local function checkMessage(rawMsg)
+    local cleanMsg = string.gsub(rawMsg, "<[^>]+>", "")
+    local lowerMsg = string.lower(cleanMsg)
+    
+    if waitingForFirstCatch and string.find(lowerMsg, "obtained") then
+        waitingForFirstCatch = false
+        sendToDiscord(cleanMsg)
+        return
+    end
+
+    local isTargetFound = false
+    for _, boxText in ipairs(savedKeywords) do
+        if boxText ~= "" then
+            local textLower = string.lower(boxText)
+            if string.find(textLower, "+") then
+                local allWordsFound = true
+                for word in string.gmatch(textLower, "[^+]+") do
+                    local cleanWord = string.match(word, "^%s*(.-)%s*$")
+                    if cleanWord ~= "" and not string.find(lowerMsg, cleanWord) then
+                        allWordsFound = false
+                        break
+                    end
+                end
+                if allWordsFound then isTargetFound = true; break end
+            else
+                if string.find(lowerMsg, textLower) then isTargetFound = true; break end
+            end
+        end
+    end
+
+    if isTargetFound then sendToDiscord(cleanMsg) end
+end
+
+-- FUNGSI PLAY
+PlayBtn.MouseButton1Click:Connect(function()
+    if isRunning then return end
+    
+    if webhookLink == "" then
+        FilterFrame.Visible = true
+        WebhookBox.Text = "ISI LINK DISCORD!"
+        task.wait(1.5)
+        WebhookBox.Text = webhookLink
+        return
+    end
+
+    isRunning = true
+    waitingForFirstCatch = true 
+    MainFrame.GroupTransparency = 0.7 
+
+    pcall(function()
+        local TCS = game:GetService("TextChatService")
+        connectionTCS = TCS.MessageReceived:Connect(function(t) checkMessage((t.PrefixText or "") .. " " .. (t.Text or "")) end)
+    end)
+    pcall(function()
+        local RS = game:GetService("ReplicatedStorage")
+        local ce = RS:WaitForChild("DefaultChatSystemChatEvents", 5)
+        if ce then connectionLegacy = ce:WaitForChild("OnMessageDoneFiltering", 5).OnClientEvent:Connect(function(d) checkMessage((d.FromSpeaker or "")=="" and ("["..d.OriginalChannel.."] "..d.Message) or ("["..d.OriginalChannel.."] "..d.FromSpeaker..": "..d.Message)) end) end
+    end)
+end)
+
+-- FUNGSI STOP
+StopBtn.MouseButton1Click:Connect(function()
+    if not isRunning then return end
+    isRunning = false
+    waitingForFirstCatch = false
+    MainFrame.GroupTransparency = 0 
+    
+    if connectionTCS then connectionTCS:Disconnect() end
+    if connectionLegacy then connectionLegacy:Disconnect() end
+end)
