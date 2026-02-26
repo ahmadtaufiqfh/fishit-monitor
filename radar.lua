@@ -48,7 +48,7 @@ ScreenGui.Parent = targetParent
 local MainFrame = Instance.new("CanvasGroup")
 MainFrame.Size = UDim2.new(0, 135, 0, 26)
 -- Menggunakan Offset Murni (Aman untuk Drag Delta Android)
-MainFrame.Position = UDim2.new(1, -100, 0, 10) 
+MainFrame.Position = UDim2.new(1, -160, 0, 12) 
 MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
 MainFrame.BorderSizePixel = 0
 MainFrame.Active = true 
@@ -59,7 +59,7 @@ Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 13)
 -- FILTER FRAME (MENU DROP-DOWN BAWAH)
 local FilterFrame = Instance.new("Frame")
 FilterFrame.Size = UDim2.new(0, 180, 0, 265)
-FilterFrame.Position = UDim2.new(1, -282, 0, 34) -- Menyesuaikan posisi MainFrame
+FilterFrame.Position = UDim2.new(MainFrame.Position.X.Scale, MainFrame.Position.X.Offset - 22, MainFrame.Position.Y.Scale, MainFrame.Position.Y.Offset + 30)
 FilterFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
 FilterFrame.Visible = false
 FilterFrame.Parent = ScreenGui
