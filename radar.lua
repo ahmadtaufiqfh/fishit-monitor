@@ -48,7 +48,7 @@ ScreenGui.Parent = targetParent
 local MainFrame = Instance.new("CanvasGroup")
 MainFrame.Size = UDim2.new(0, 135, 0, 26)
 -- Menggunakan Offset Murni (Aman untuk Drag Delta Android)
-MainFrame.Position = UDim2.new(1, -260, 0, 4) 
+MainFrame.Position = UDim2.new(1, -100, 0, 4) 
 MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
 MainFrame.BorderSizePixel = 0
 MainFrame.Active = true 
