@@ -44,11 +44,10 @@ ScreenGui.Name = "Radar"
 ScreenGui.ResetOnSpawn = false
 ScreenGui.Parent = targetParent
 
--- MAIN FRAME (KOTAK ATAS)
+-- MAIN FRAME (KOTAK ATAS - POSISI CUSTOM)
 local MainFrame = Instance.new("CanvasGroup")
 MainFrame.Size = UDim2.new(0, 135, 0, 26)
--- Menggunakan Offset Murni (Aman untuk Drag Delta Android)
-MainFrame.Position = UDim2.new(1, -160, 0, 12) 
+MainFrame.Position = UDim2.new(1, -200, 0, -35) -- Titik awal sesuai permintaan Anda
 MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
 MainFrame.BorderSizePixel = 0
 MainFrame.Active = true 
@@ -56,10 +55,10 @@ MainFrame.GroupTransparency = 0
 MainFrame.Parent = ScreenGui
 Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 13)
 
--- FILTER FRAME (MENU DROP-DOWN BAWAH)
+-- FILTER FRAME (MENU DROP-DOWN BAWAH - SEJAJAR)
 local FilterFrame = Instance.new("Frame")
 FilterFrame.Size = UDim2.new(0, 180, 0, 265)
-FilterFrame.Position = UDim2.new(MainFrame.Position.X.Scale, MainFrame.Position.X.Offset - 22, MainFrame.Position.Y.Scale, MainFrame.Position.Y.Offset + 30)
+FilterFrame.Position = UDim2.new(1, -222, 0, -5) -- Disesuaikan agar simetris di bawah MainFrame
 FilterFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
 FilterFrame.Visible = false
 FilterFrame.Parent = ScreenGui
@@ -126,7 +125,7 @@ for i = 1, 10 do
     end)
 end
 
--- SISTEM DRAG (AMAN UNTUK SEMUA EXECUTOR ANDROID)
+-- SISTEM DRAG (SINKRONISASI POSISI BARU)
 local dragging, dragInput, dragStart, startPos
 MainFrame.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
@@ -141,6 +140,7 @@ game:GetService("UserInputService").InputChanged:Connect(function(input)
     if input == dragInput and dragging then
         local delta = input.Position - dragStart
         MainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        -- Posisi Dropdown mengunci selisih 22 pixel ke kiri, dan 30 pixel ke bawah saat di-drag
         FilterFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X - 22, startPos.Y.Scale, startPos.Y.Offset + delta.Y + 30)
     end
 end)
@@ -211,7 +211,7 @@ local function sendToDiscord(cleanMsg)
 
     local newLine = ""
     
-    -- [PERBAIKAN SPOILER]: Kebal terhadap spasi gaib
+    -- Spoiler Scanner yang Kebal terhadap spasi gaib & simbol ekstra
     local prefix, username, rest = string.match(cleanMsg, "(.*%[Server%]%:?%s*)(%S+)(.*)")
     
     if prefix and username and rest then
